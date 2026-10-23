@@ -1,0 +1,3 @@
+kernel/linux-*.tar.xz
+kernel/*.part
+kernel/opt/
