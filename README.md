@@ -2,7 +2,10 @@
 
 Two Alpine Linux containers boot a custom ARM64 Linux kernel with
 `CONFIG_WIREGUARD=y`. WireGuard runs in the Linux kernel; no `wireguard-go`
-process is needed. The installed Apple CLI is version 0.1.0.
+process is needed. The installed Apple CLI and API server are version 1.6.0
+(commit `ca4884f`), upgraded from 0.1.0 on October 23, 2026. The lab uses
+`--cap-add NET_ADMIN` to configure WireGuard interfaces under the newer
+runtime's restricted capability defaults.
 
 | Container | Tunnel address | UDP port |
 | --- | --- | --- |
@@ -16,7 +19,12 @@ are generated inside each container with restrictive file permissions.
 Validated on this Mac: both peers report `6.18.5-wg-testbed` and
 `CONFIG_WIREGUARD=y`; wg0 reports interface type `wireguard`. Both peers
 completed a handshake and received all three tunnel pings with zero loss,
-averaging approximately 0.9 ms round trip.
+averaging approximately 0.9 ms round trip on the original 0.1.0 runtime.
+After upgrading to 1.6.0, fresh peers and a subsequent stop/start/reconfigure
+cycle both passed all pings and handshake checks with zero packet loss.
+Keys persisted across stop/start, while eth0 addresses changed and were
+rediscovered. See [the upgrade record](JOURNEY.md#11-runtime-upgrade-to-160)
+and [saved validation output](validation/).
 
 From this directory:
 

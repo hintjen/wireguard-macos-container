@@ -6,12 +6,14 @@ conversation, command results, and retained files, rather than a complete
 timestamped terminal transcript. Commands below are representative of the actual
 steps; the maintained scripts are the source for rerunning the final setup.
 
-## Outcome and scope
+## Original outcome and scope
 
 Two Alpine Linux containers running under Apple's `container` CLI communicate
 through native Linux kernel WireGuard. We built a custom ARM64 kernel and passed
 it to each container with `--kernel`. We did not upgrade the installed CLI or
-replace its default kernel.
+replace its default kernel during the initial testbed work. The subsequent
+upgrade to 1.6.0 is documented in section 11; the table below records the
+original 0.1.0 result.
 
 | Property | Final value |
 | --- | --- |
@@ -361,3 +363,148 @@ tools or successfully booting an arbitrary kernel proves only part of that.
 
 The upstream `main` links explain what was consulted; they may evolve and are
 not immutable evidence of the local installation's behavior.
+
+## 11. Runtime upgrade to 1.6.0
+
+Later on October 23, 2026, the user asked whether the installed runtime was
+current. GitHub's latest release API identified **1.6.0**, published October
+20, 2026. The user authorized upgrading the runtime and updating these notes.
+
+### Preparation and installer verification
+
+The repository was clean before this work. The old runtime listed the two
+running peers and the stopped kernel builder. We read the version-specific
+README, which requires `container system stop` before installing an upgrade.
+It also states that application-data forward compatibility is guaranteed
+within a major version; our jump from 0.1.0 to 1.6.0 crossed that boundary.
+
+We downloaded Apple's signed installer with the authenticated GitHub CLI:
+
+```sh
+gh release download 1.6.0 --repo apple/container \
+  --pattern container-1.6.0-installer-signed.pkg \
+  --dir /private/tmp/wireguard-runtime-upgrade
+```
+
+The approximately 149 MiB installer matched the release asset digest:
+
+```text
+a084d66df2fb573172d7f923fa83c9229d17f6c1ab61f09c8a90c43dab66ba02
+```
+
+Verification initially produced misleading failures: a package check ran
+before the download completed, then a sandboxed signature check reported an
+invalid signature even after the digest matched. With normal macOS trust
+service access outside the sandbox, `pkgutil --check-signature` confirmed
+Apple Inc. - Containerization as the signer and trusted notarization.
+`spctl --assess --type install --verbose=2` also accepted the package as a
+Notarized Developer ID installer. We did not bypass signature verification.
+
+After stopping the runtime, we made an APFS clone copy of its approximately
+5.3 GiB application-data directory into a mode-700 backup directory:
+
+```text
+/private/tmp/wireguard-runtime-upgrade/backup/com.apple.container
+```
+
+This is a local temporary backup, not a durable archive. It includes container
+filesystems and their private keys, so it is not committed to Git. It was
+left in place after the upgrade; rollback was not exercised.
+
+### Installation and data compatibility
+
+Passwordless `sudo` was unavailable. We invoked macOS administrator
+authentication through `osascript` to run:
+
+```sh
+/usr/sbin/installer \
+  -pkg /private/tmp/wireguard-runtime-upgrade/container-1.6.0-installer-signed.pkg \
+  -target /
+```
+
+The installer reported success. After `container system start`, both client
+and API server reported version **1.6.0**, commit:
+
+```text
+ca4884f8f3a13b62c90ea2fb3834f214d61fb91c
+```
+
+The new runtime listed zero containers, although the Alpine image remained
+available. We did not infer that the old peers had migrated successfully or
+attempt to force their old metadata into the new runtime. We recreated the
+lab; the pre-upgrade state remains in the temporary backup. The old builder
+was not recreated because the built native kernel and build records were
+already retained in the repository.
+
+### Required lab adjustment
+
+Unlike the original installation, 1.6.0 documents restricted default Linux
+capabilities. We changed `lab.sh up` to explicitly pass:
+
+```sh
+container run ... --cap-add NET_ADMIN --kernel "$kernel" ...
+```
+
+The peers continue to boot the exact same native WireGuard image. The upgrade
+did not rebuild it or switch the lab to userspace WireGuard. The new runtime
+fetched `ghcr.io/apple/containerization/vminit:0.52.1` on first creation.
+Each recreated peer generated new keys, so its identity differs from the
+original 0.1.0 peer. This is distinct from restart persistence below.
+
+### Validation and restart recovery
+
+The first validation invocation failed with `Operation not permitted` under
+the restricted tool sandbox, even though direct inspection showed a working
+WireGuard handshake. Rerunning with normal XPC access succeeded. We retained
+the successful output rather than treating the access error as a VPN failure.
+
+We then stopped both peers, started each separately, ran `lab.sh configure`,
+and ran the test again. An attempted multi-container `container start` was
+rejected because that command accepts one ID; separate starts succeeded.
+
+Both successful test runs returned status 0 and showed:
+
+- Three of three tunnel pings received in each direction, with zero loss.
+- Live `CONFIG_WIREGUARD=y` and native `wireguard` interface type on both peers.
+- Completed handshakes and nonzero bidirectional transfer counters.
+- Successful handshake timestamp assertions on both peers.
+
+Public keys were compared before and after stop/start and matched for both
+peers. Their eth0 addresses changed from `192.168.64.2`/`.3` to
+`192.168.64.4`/`.5`; `configure` discovered the new addresses and updated the
+endpoints. Tunnel addresses remained `10.77.0.1` and `10.77.0.2`.
+
+The initial 1.6.0 ping averages were 1.585 ms and 2.444 ms; after restart they
+were 1.802 ms and 1.180 ms. These remain small connectivity samples, not
+performance comparisons between versions.
+
+Saved evidence:
+
+- [Client/server version and status](validation/runtime-1.6.0-status.txt)
+- [Initial 1.6.0 validation](validation/runtime-1.6.0-initial.txt)
+- [Validation after restart and reconfiguration](validation/runtime-1.6.0-restart.txt)
+
+These transcripts contain public keys and `(hidden)` placeholders for private
+keys. They contain no private-key material. Trailing formatting whitespace was
+removed when preparing them for Git.
+
+### What this upgrade resolved, and what remains
+
+The local runtime is now current as checked on October 23, 2026. We have also
+closed the earlier gap around container stop/start recovery with key
+persistence and changing endpoint addresses. A full macOS reboot, rebuilding
+the kernel under the new runtime, throughput, and large-packet testing remain
+unverified. The new peers' eth0 MTU was observed as 1280 while the lab still
+sets wg0 to 1420; small successful pings do not validate that MTU choice for
+large traffic.
+
+The operational lesson from the upgrade is that runtime binaries, guest init
+images, guest kernels, saved container metadata, and capability defaults are
+separate compatibility concerns. A successful installer and a new CLI version
+are not sufficient evidence that an existing lab still works.
+
+Version-specific sources:
+
+- [1.6.0 release](https://github.com/apple/container/releases/tag/1.6.0)
+- [1.6.0 installation and upgrade instructions](https://github.com/apple/container/blob/1.6.0/README.md)
+- [1.6.0 capability defaults](https://github.com/apple/container/blob/1.6.0/docs/runtime-configuration.md)

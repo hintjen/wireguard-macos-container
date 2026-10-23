@@ -6,7 +6,7 @@ case "${1:-test}" in
   up)
     test -f "$kernel"
     for node in a b; do
-      container run -d --name "wg-test-$node" --kernel "$kernel" alpine:3.22 sleep infinity
+      container run -d --name "wg-test-$node" --cap-add NET_ADMIN --kernel "$kernel" alpine:3.22 sleep infinity
       container exec "wg-test-$node" sh -ec 'apk add --no-cache wireguard-tools iproute2 iputils curl; umask 077; mkdir -p /etc/wireguard; wg genkey > /etc/wireguard/private; wg pubkey < /etc/wireguard/private > /etc/wireguard/public'
     done
     ./lab.sh configure

@@ -1,0 +1,46 @@
+PING 10.77.0.2 (10.77.0.2) 56(84) bytes of data.
+64 bytes from 10.77.0.2: icmp_seq=1 ttl=64 time=1.01 ms
+64 bytes from 10.77.0.2: icmp_seq=2 ttl=64 time=3.34 ms
+64 bytes from 10.77.0.2: icmp_seq=3 ttl=64 time=1.06 ms
+
+--- 10.77.0.2 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2013ms
+rtt min/avg/max/mdev = 1.009/1.802/3.344/1.090 ms
+PING 10.77.0.1 (10.77.0.1) 56(84) bytes of data.
+64 bytes from 10.77.0.1: icmp_seq=1 ttl=64 time=0.942 ms
+64 bytes from 10.77.0.1: icmp_seq=2 ttl=64 time=1.17 ms
+64 bytes from 10.77.0.1: icmp_seq=3 ttl=64 time=1.43 ms
+
+--- 10.77.0.1 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2030ms
+rtt min/avg/max/mdev = 0.942/1.180/1.426/0.197 ms
+CONFIG_WIREGUARD=y
+7: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/none  promiscuity 0 allmulti 0 minmtu 0 maxmtu 2147483552
+    wireguard addrgenmode none numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 524280 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 65536 gro_ipv4_max_size 65536
+interface: wg0
+  public key: +d2pw/0nnwOKqdM/qCG/EPy1pDqmHDTDtUQ7W8lo9W8=
+  private key: (hidden)
+  listening port: 51820
+
+peer: mr8jQcO+vznbWZttnhQLjFnchoCaZ6gZUXcCTWqQnCU=
+  endpoint: 192.168.64.5:51820
+  allowed ips: 10.77.0.2/32
+  latest handshake: 9 seconds ago
+  transfer: 948 B received, 1.02 KiB sent
+  persistent keepalive: every 5 seconds
+CONFIG_WIREGUARD=y
+7: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/none  promiscuity 0 allmulti 0 minmtu 0 maxmtu 2147483552
+    wireguard addrgenmode none numtxqueues 1 numrxqueues 1 gso_max_size 65536 gso_max_segs 65535 tso_max_size 524280 tso_max_segs 65535 gro_max_size 65536 gso_ipv4_max_size 65536 gro_ipv4_max_size 65536
+interface: wg0
+  public key: mr8jQcO+vznbWZttnhQLjFnchoCaZ6gZUXcCTWqQnCU=
+  private key: (hidden)
+  listening port: 51820
+
+peer: +d2pw/0nnwOKqdM/qCG/EPy1pDqmHDTDtUQ7W8lo9W8=
+  endpoint: 192.168.64.4:51820
+  allowed ips: 10.77.0.1/32
+  latest handshake: 9 seconds ago
+  transfer: 892 B received, 948 B sent
+  persistent keepalive: every 5 seconds

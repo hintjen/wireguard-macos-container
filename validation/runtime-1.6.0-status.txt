@@ -1,0 +1,18 @@
+FIELD               VALUE
+status              running
+client.version      1.6.0
+client.build        release
+client.commit       ca4884f8f3a13b62c90ea2fb3834f214d61fb91c
+host.os             Version 26.6.2 (Build 25G83)
+host.architecture   arm64
+host.cpus           10
+server.version      1.6.0
+server.build        release
+server.commit       ca4884f8f3a13b62c90ea2fb3834f214d61fb91c
+server.appName      container-apiserver
+paths.appRoot       /Users/balaa/Library/Application Support/com.apple.container/
+paths.installRoot   /usr/local/
+paths.logRoot
+containers.total    2
+containers.running  2
+images.total        3
