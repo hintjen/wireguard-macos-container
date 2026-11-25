@@ -508,3 +508,129 @@ Version-specific sources:
 - [1.6.0 release](https://github.com/apple/container/releases/tag/1.6.0)
 - [1.6.0 installation and upgrade instructions](https://github.com/apple/container/blob/1.6.0/README.md)
 - [1.6.0 capability defaults](https://github.com/apple/container/blob/1.6.0/docs/runtime-configuration.md)
+
+## 12. Container 1.7.1, systemd, and full-tunnel wg-quick
+
+Checked on November 21, 2026, without rebuilding the kernel and without
+changing `lab.sh`. The file `kernel/vmlinux-native-wireguard` still matches
+SHA-256 `241bd538d3dfa6eb741b7aa14aa35afb13840e574a6b50e4a2dc66022626d92b`.
+
+| Property | Observed value |
+| --- | --- |
+| macOS | 26.7.2, build 25G332 |
+| CLI | `/usr/local/bin/container`, version 1.7.1, commit `a15b460` |
+| Guest kernel | `6.18.5-wg-testbed` |
+| `CONFIG_WIREGUARD` | `=y` in the live `/proc/config.gz` |
+| Image used for this check | Ubuntu 24.04 with systemd as PID 1 |
+| Capabilities | `--cap-add NET_ADMIN` only |
+
+`--kernel` still selects the kernel for that container alone. The runtime's
+default kernel remained `6.18.56` and, as on earlier Kata kernels, has no
+`CONFIG_WIREGUARD` line. A running container must be stopped before it can be
+deleted and recreated with the new kernel. `container delete` on a running
+container returns an invalid-state error and leaves the old kernel in place.
+
+### systemd as PID 1
+
+Starting Ubuntu's `/sbin/init` with only `--cap-add NET_ADMIN` failed before
+any userspace service was usable:
+
+```text
+Failed to mount tmpfs (type tmpfs) on /run: Operation not permitted
+Failed to mount tmpfs (type tmpfs) on /run/lock: Operation not permitted
+[!!!!!!] Failed to mount API filesystems.
+Exiting PID 1...
+```
+
+The same image stayed up when the container was created with:
+
+```sh
+--env container=container --tmpfs /run --tmpfs /run/lock
+```
+
+PID 1 was `systemd`. `container=container` tells systemd it is not machine
+init, so the failed API mounts are no longer fatal. The tmpfs mounts give
+`/run` a writable runtime directory anyway. This does not apply to the Alpine
+`sleep infinity` peers, which never run systemd.
+
+### Full-tunnel wg-quick and read-only /proc/sys
+
+`ip link add ... type wireguard` succeeded on this kernel. A `wg-quick`
+profile with `AllowedIPs = 0.0.0.0/0` then installed fwmark `51820`
+(`0xca6c`), the suppress-prefixlength rule, and the default route in table
+51820. `wg-quick down` removed them.
+
+On Container 1.7.1, `/proc/sys` is read-only by default, together with
+`/proc/bus`, `/proc/fs`, `/proc/irq`, and `/proc/sysrq-trigger`. The full
+tunnel therefore hit:
+
+```text
+sysctl: setting key "net.ipv4.conf.all.src_valid_mark", ignoring: Read-only file system
+```
+
+`wg-quick` still exited 0. Reading the key afterwards returned `0`, so the
+setting was not applied. The lab's `/32` peer routes do not run this sysctl,
+which is why `./lab.sh test` does not show the failure.
+
+Recreating the container with `--read-only-path NONE` made the same key
+writable. A direct write moved it from `0` to `1`, `wg-quick up` no longer
+printed the read-only warning, the key read back as `1`, and `wg-quick down`
+still removed the interface. `--masked-path` was left at the runtime default,
+so paths such as `/proc/kcore` and `/proc/keys` stayed hidden. `--cap-add ALL`
+was not required.
+
+`NONE` clears every default read-only path, not only `/proc/sys`. That is
+broader than this one sysctl. It was enough to prove the full-tunnel path.
+A narrower allowlist was not tested.
+
+`wg-quick` chose MTU 1200 only because that profile did not set `MTU`.
+On November 25 the same kernel and Container 1.7.1, still with
+`--read-only-path NONE` and `--cap-add NET_ADMIN`, ran a profile that set
+`MTU = 1376` and `AllowedIPs = 0.0.0.0/0`. `src_valid_mark` read back as `1`,
+fwmark was `0xca6c`, and the peer completed a handshake. IPv4 through the
+tunnel worked, including DNS answered on `wg0`. `wg-quick down` removed the
+IPv4 policy rules, and a later `up` put them back. The lab's explicit wg0
+MTU of 1420 is still unmeasured, as are throughput and large packets.
+
+### NIC name under systemd
+
+The Alpine peers in section 11 expose `eth0`, and `lab.sh` discovers
+addresses with `ip addr show eth0`. That name is not what a systemd guest
+gets on this kernel. udev names the virtio NIC `enp0s1`. A link file applied
+on the next boot renames it:
+
+```ini
+[Match]
+Driver=virtio_net
+
+[Link]
+Name=eth0
+```
+
+After that boot the address is on `eth0`. `container stop` and
+`container start` keep the guest root, so the file survives. The Alpine lab
+does not need the file.
+
+### systemd-resolved
+
+Getting PID 1 to stay up does not start every Ubuntu 24.04 service.
+`systemd-resolved` (systemd 255, `User=systemd-resolve`) failed with:
+
+```text
+Failed to keep CAP_SYS_ADMIN: Operation not permitted
+```
+
+and exit status `217/USER`. Status 217 here is a privilege setup failure,
+not a missing user. A drop-in that only turns off the mount sandbox leaves
+the unit's syscall filter in place, and the service still fails. The drop-in
+also has to clear `SystemCallFilter=` with an empty assignment. With that
+change the service reached `active`. `CAP_SYS_ADMIN` was not added to the
+container. `proc-sys-fs-binfmt_misc.automount` failed beside it and was left
+failed.
+
+Still unchecked, as in section 11: a macOS reboot, throughput, and large
+packets.
+
+Version-specific source:
+
+- [Container 1.7.1 runtime configuration](https://github.com/apple/container/blob/1.7.1/docs/runtime-configuration.md)
